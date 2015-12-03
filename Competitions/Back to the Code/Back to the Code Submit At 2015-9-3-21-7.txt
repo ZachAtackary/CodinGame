@@ -1,0 +1,696 @@
+#include <iostream>
+#include <string>
+#include <vector>
+#include <algorithm>
+#include <sstream>
+#include <list>
+#include <array>
+#include <tuple>
+#include "stdlib.h"
+#include <utility>
+
+
+using namespace std;
+
+//temp variables
+int locExplored;
+
+const int RIGHT = 1;
+const int LEFT = -1;
+const int EMPTY = 1000;
+const int ENEMY = 10000;
+
+struct Location {
+  char owner;
+  pair<int,int> loc;
+};
+
+list <Location> boarders[4];
+
+pair<int,int> findSquareBoarders[2];
+bool hasOutputed;
+float timeMultiplier;
+bool firstTime = true;
+bool makeSquareInit = true;
+int myX, prevMyX, myY, prevMyY, destination[2];
+int turn = 101;
+int lastTurn = 100;
+list <int> destinationsX;
+list <int> destinationsY;
+pair<pair<int,int>,pair<int,int>> opponent[3], lastOpponent[3];
+int myXVelocity, prevMyXVelocity, myYVelocity, prevMyYVelocity;
+int opponentCount;
+char map[35][20];
+char boarderMap[35][20];
+double valueMap[35][20];
+bool explored[35][20];
+int gameRound;
+
+void outputMap(char map[][20] = map) {
+    stringstream s;
+    for (int y = 0; y < 20; y++) {
+        for (int x = 0; x < 35; x++) {
+            s << map[x][y];
+        }
+        s << endl;
+    }
+    cerr << s.str();
+}
+
+void findVelocity() {
+  if (firstTime) {
+    for (int i = 0; i < opponentCount; i++) {
+      lastOpponent[i].first.first = opponent[i].first.first;
+      lastOpponent[i].first.second = opponent[i].first.second;
+      lastOpponent[i].second = make_pair(0,0);
+    }
+    prevMyXVelocity = 0;
+    prevMyX = myX;
+    prevMyYVelocity = 0;
+    prevMyY = myY;
+    firstTime = false;
+  }
+  for (int i = 0; i < opponentCount; i++) {
+    opponent[i].second.first = opponent[i].first.first - opponent[i].second.first;
+    opponent[i].second.first = opponent[i].first.first - opponent[i].second.first;
+  }
+  myXVelocity = myX - prevMyX;
+  myYVelocity = myY - prevMyY;
+}
+
+void storeVals() {
+  for (int i = 0; i < opponentCount; i++) {
+    lastOpponent[i] = opponent[i];
+  }
+  prevMyXVelocity = myXVelocity;
+  prevMyYVelocity = myYVelocity;
+  prevMyX = myX;
+  prevMyY = myY;
+}
+
+void getMap() {
+  char c;
+  for (int y = 0; y < 20; y++) {
+    string line; // One line of the map ('.' = free, '0' = you, otherwise the id of the opponent)
+    cin >> line; cin.ignore();
+    for (int x = 0; x < line.length(); x++) {
+      map[x][y] = line[x];
+    }
+  }
+}
+
+void output(int x, int y) {
+  hasOutputed = true;
+  if (myX == prevMyX && myY == prevMyY) cout << rand() % 34 << " " << rand() % 20 << endl;
+  else if (x == 1000) cout << rand() % 34 << " " << rand() % 20 << endl;
+  else cout << x << "  " << y << endl;
+}
+
+void print(list<pair<int,int>> s) {
+  list<pair<int,int>>::iterator i;
+  for( i = s.begin(); i != s.end(); ++i)
+    cerr << i->first << " " << i->second << endl;
+  cerr << endl;
+}
+
+int distCalc (pair<int,int> a, pair<int,int> b) {
+  return abs(b.first - a.first) + abs(b.second - a.second);
+}
+
+int timeToCapture(list<pair<int,int>> emptyBoarder, bool out = false) {
+  int minDist = 1000;
+  int distToLoc;
+  list<pair<int,int>>::iterator i;
+  list<pair<int,int>>::iterator loc = emptyBoarder.begin();
+  for (i = emptyBoarder.begin(); i != emptyBoarder.end(); ++i) {
+    distToLoc = abs(myX - i->first) + abs(myY - i->second);
+    if( distToLoc < minDist) {
+      minDist = distToLoc;
+      loc = i;
+    }
+  }
+  int time = minDist;
+  //cerr << "min dist to start: " << minDist;
+  pair<int,int> prevLoc = *loc;
+  pair<int,int> firstMove = make_pair(EMPTY,EMPTY);
+  if (out == true) cerr << "first Move: " << firstMove.first << ", " << firstMove.second << endl;
+  for (i = loc; i != emptyBoarder.end(); i++) {
+    if (firstMove.first == EMPTY) firstMove = *i;
+    time += distCalc(*i, prevLoc);
+    prevLoc = make_pair(i->first, i->second);
+  }
+  for (i = emptyBoarder.begin(); i != loc; i++) {
+    if (firstMove.first == EMPTY) firstMove = *i;
+    time += distCalc(*i, prevLoc);
+    prevLoc = make_pair(i->first, i->second);
+  }
+  int time2 = minDist;
+  pair<int,int> firstMove2 = make_pair(EMPTY,EMPTY);;
+  prevLoc = *loc;
+  i = loc;
+  list<pair<int,int>>::iterator end = emptyBoarder.begin();
+  end--; //we want to make sure we go to the last one!
+  for (i = loc; i != end; i--) {
+    if (firstMove2.first == EMPTY) firstMove2 = *i;
+    time2 += distCalc(*i, prevLoc);
+    //if (out == true)cerr << "time2: " << time2 << endl;
+    prevLoc = make_pair(i->first, i->second);
+  }
+  i = emptyBoarder.end();
+  i--;
+  for (i; i != loc; i--) {
+    if (firstMove2.first == EMPTY) firstMove2 = *i;
+    time2 +=  distCalc(*i, prevLoc);
+    prevLoc = make_pair(i->first, i->second);
+    //if (out == true)cerr << "time2: " << time2 << endl;
+  }
+  if (out == true) {
+    cerr << "time to capture C: " << time << endl;
+    cerr << "time to capture CC: " << time2 << endl;
+  }
+  if (time2 < time) {
+    if (out == true) {
+      cerr << "next square to go to: " << firstMove2.first << ", " << firstMove2.second << endl;
+      output(firstMove2.first, firstMove2.second);
+    }
+    return time2;
+  }
+  else if (time <= time2) {
+    if (out == true) {
+      cerr << "next square to go to: " << firstMove.first << ", " << firstMove.second << endl;
+      output(firstMove.first, firstMove.second);
+    }
+    return time;
+  }
+}
+
+list<pair<int,int>> getBoarder(pair<int,int> bounds[], bool onlyEmptys = true) {
+  int xInc = 1;
+  list<pair<int,int>> top;
+  list<pair<int,int>> bottom;
+  list<pair<int,int>> left;
+  list<pair<int,int>> right;
+  list<pair<int,int>> boarder;
+
+  for (int x = min(bounds[0].first, bounds[1].first); x <= max(bounds[0].first, bounds[1].first)-1; x++) {
+    if (onlyEmptys == true) {
+      if (map[x][bounds[0].second] == '.') top.push_back(make_pair(x,bounds[0].second));
+    } else top.push_back(make_pair(x,bounds[0].second));
+  }
+  for (int x = min(bounds[0].first, bounds[1].first)+1; x <= max(bounds[0].first, bounds[1].first); x++) {
+    if (onlyEmptys == true) {
+    if (map[x][bounds[1].second] == '.') bottom.push_front(make_pair(x,bounds[1].second));
+    } else bottom.push_front(make_pair(x,bounds[1].second));
+  }
+  for (int y = min(bounds[0].second, bounds[1].second); y <= max(bounds[0].second, bounds[1].second) -1; y++) {
+    if (onlyEmptys == true) {
+      if (map[bounds[1].first][y] == '.') right.push_back(make_pair(bounds[1].first,y));
+    } else right.push_back(make_pair(bounds[1].first,y));
+  }
+  for (int y = min(bounds[0].second, bounds[1].second)+1; y <= max(bounds[0].second, bounds[1].second); y++) {
+    if (onlyEmptys == true) {
+    if (map[bounds[0].first][y] == '.') left.push_front(make_pair(bounds[0].first,y));
+    } else left.push_front(make_pair(bounds[0].first,y));
+  }
+  boarder.splice(boarder.end(), top);
+  boarder.splice(boarder.end(), right);
+  boarder.splice(boarder.end(), bottom);
+  boarder.splice(boarder.end(), left);
+  return boarder;
+}
+
+int countBlanks(int x1, int y1, int x2, int y2) {
+  double count = 0;
+  for (int y = min(y1,y2); y <= max(y1,y2); y++) {
+    for (int x = min(x1,x2); x <= max(x1,x2); x++) {
+      //count += valueMap[x][y];
+      if (map[x][y] == '.') count++;
+    }
+  }
+  return count;
+}
+
+pair<int,int> lastSquare[2];
+int squareSize;
+
+void findSquare() {
+  int ymin, ymax, xmin, xmax;
+  if (findSquareBoarders[0].first != 0 || findSquareBoarders[1].first != 0) {
+    ymin = min(findSquareBoarders[0].second,findSquareBoarders[1].second);
+    xmin = min(findSquareBoarders[0].first,findSquareBoarders[1].first);
+    ymax = max(findSquareBoarders[0].second,findSquareBoarders[1].second);
+    xmax = max(findSquareBoarders[0].first,findSquareBoarders[1].first);
+  }
+  else {
+    ymin = 0;
+    xmin = 0;
+    ymax = 19;
+    xmax = 34;
+  }
+  cerr << "current square Boarders are " << xmin << ", " << ymin << " and " << xmax << ", " << ymax << endl;
+  int test = 0;
+  int maxX = 34;
+  float volume, time;
+  float bestValue = 0;
+  float value;
+  pair<int,int> bounds[2];
+  int distanceToCorners[4];
+  int cornersX[4];
+  int cornersY[4];
+  int count = 0;
+  for (int y1 = ymin; y1 <= ymax; y1++) {
+    for (int x1 = xmin; x1 <= xmax; x1++) {
+      for (int y2 = y1; y2 <= ymax; y2++) {
+        for (int x2 = x1 -1; x2 <= maxX; x2++) {
+          count++;
+          if ((map[x2+1][y2] != '.' && map[x2+1][y2] != '0') || x2 == maxX) {
+            if (x2 - x1 <= squareSize && y2 - y1 <= squareSize) {
+              maxX = x2;
+              volume = countBlanks(x1, y1, x2, y2);
+              pair<int,int> boarder[2] = {make_pair(x1,y1),make_pair(x2,y2)};
+              time = timeToCapture(getBoarder(boarder));
+              value = volume/time;
+              //cerr << "value: " << value << endl;
+              if (value > bestValue ){//&& (x2 - x1) < 16 && (y2 - y1) < 16) {
+                bestValue = value;
+                bounds[0] = make_pair(x1,y1);
+                bounds[1] = make_pair(x2,y2);
+              }
+            }
+          }
+        }
+      }
+      maxX = xmax; //new starting position, new maxX
+    }
+  }
+  cerr << "number of calulations: " << count << endl;
+  cerr << "best value is at (" << bounds[0].first << ", " << bounds[0].second << "),(" << bounds[1].first << ", " << bounds[1].second << ")" << endl;
+  lastSquare[0] = bounds[0];
+  lastSquare[1] = bounds[1];
+  timeToCapture(getBoarder(bounds), true);
+}
+
+int getDistFromEnemys(int x, int y) {
+  int closestDist = 1000;
+  int dist;
+  for (int i = 0; i < opponentCount; i++){
+    dist = distCalc(make_pair(x,y), opponent[i].first);
+    if (dist < closestDist) closestDist = dist;
+  }
+  return closestDist;
+}
+
+void createValueMap() {
+}
+
+bool squareContainsOnly(pair<int,int> bounds[], char c) {
+  for (int y = bounds[0].second; y <= bounds[1].second; y++) {
+    for (int x = bounds[0].first; x <= bounds[0].second; x++) {
+      if (map[x][y] != '.' && map[x][y] != c) return false;
+    }
+  }
+  return true;
+}
+
+bool enemyOnBoarder(list<pair<int,int>> boarder, int enemy) {
+  list<pair<int,int>>::iterator i;
+  for (i = boarder.begin(); i != boarder.end(); i++) {
+    if (opponent[enemy].first.first == i->first && opponent[enemy].first.second == i->second) return true;
+  }
+  return false;
+}
+
+bool canWeGetThere(list<pair<int,int>> boarder, int time) {
+  list<pair<int,int>>::iterator i;
+  for (i = boarder.begin(); i != boarder.end(); i++) {
+    if (distCalc (make_pair(myX,myY), *i) < time) return true;
+  }
+  return false;
+}
+
+int area(pair<int,int> b[]) {
+  return abs(b[0].first - b[1].first) * abs(b[0].second - b[1].second);
+}
+
+int perimiter(pair<int,int> b[]) {
+  return abs(b[0].first - b[1].first)*2 +  abs(b[0].second - b[1].second)*2;
+}
+
+bool isEnemySquare(pair<int,int> bounds[]) {
+  bool enemysBoarder;
+  int boarderBelongsTo = 0;
+  int boarderCount = 0;
+  list<pair<int,int>> boarder = getBoarder(bounds, false);
+  list<pair<int,int>>::iterator i;
+  for (int j = 1; j <= opponentCount; j++) {
+    /*if (squareContainsOnly(bounds, (char)(j+48)))*/ boarderBelongsTo = j;
+    //else break;
+    for (i = boarder.begin(); i != boarder.end(); i++) {
+      if (map[i->first][i->second] == (char)(j+48)) boarderCount++;
+    }
+  }
+  if (boarderBelongsTo == 0 || boarder.size() == 0 || boarderCount == 0) return false;
+  int totalBoarderCount = boarder.size();
+  float boarderCompleteRatio = boarderCount/totalBoarderCount;
+  int timeToCompletion = totalBoarderCount - boarderCount;
+  if (boarderCompleteRatio > .5) {
+    //cerr << "someone Is over 50% done with a square" << endl;
+    if (enemyOnBoarder(boarder, boarderBelongsTo - 1) /*&& area(bounds) > 0*/) {//minus 1 because thats the spot in the array
+      cerr << "someone is over 50% done with a square and he is on it!" << endl << "x1: " <<bounds[0].first << endl <<
+        "y1: " << bounds[0].second << endl << "x2: " << bounds[1].first << endl
+           << "y2: " << bounds[2].first << endl;
+      if (canWeGetThere(boarder, timeToCompletion)) cerr << "someone is over 50% done with a square and we have time to stop it from completing!" << endl;
+    }
+  }
+  return true;
+}
+
+void findEnemySquares() {
+  pair<int,int> bounds[2];
+  int maxX = 34;
+  list<Location>::iterator i;
+  for (int count = 1; count <= opponentCount; count++) {
+    for (i = boarders[count].begin(); i != boarders[count].end(); i++) {
+      for (int y2 = i->loc.second; y2 <= 19; y2++) {
+        for (int x2 = i->loc.first; x2 <= maxX; x2++) {
+          if ((map[x2][y2] == '0' )) maxX = x2;
+          bounds[0] = make_pair(i->loc.first,i->loc.second);
+          bounds[1] = make_pair(x2,y2);
+          //cerr << "testing if square belongs to enemy" << endl;
+          isEnemySquare(bounds);
+        }
+      }
+      maxX = 34;
+    }
+  }
+}
+
+void outputBoarderScreen() {
+    stringstream s;
+    s << "boarderMap:" << endl;
+    for (int y = 0; y < 20; y++) {
+        for (int x = 0; x < 35; x++) {
+            s << boarderMap[x][y];
+        }
+        s << endl;
+    }
+    cerr << s.str();
+}
+
+void buildBoarderMap() {
+  list<Location>::iterator i;
+  //cerr << "boarders length: " << boarders.size() << endl;
+  for (int count = 0; count <= opponentCount; count++) {
+    for (i = boarders[count].begin(); i != boarders[count].end(); i++) {
+      boarderMap[i->loc.first][i->loc.second] = i->owner;
+    }
+  }
+}
+
+void exploreLocation(int x, int y, char c) {
+  if (x > 34 || x < 0 || y > 19 || y < 0) return;
+  locExplored++;
+  explored[x][y] = true;
+  if (map[x][y] != c) {
+    if (!explored[x-1][y]) exploreLocation(x-1, y, c);
+    if (!explored[x+1][y]) exploreLocation(x+1, y, c);
+    if (!explored[x][y-1]) exploreLocation(x, y-1, c);
+    if (!explored[x][y+1]) exploreLocation(x, y+1, c);
+    if (!explored[x-1][y-1]) exploreLocation(x-1, y-1, c);
+    if (!explored[x+1][y+1]) exploreLocation(x+1, y+1, c);
+    if (!explored[x+1][y-1]) exploreLocation(x+1, y-1, c);
+    if (!explored[x-1][y+1]) exploreLocation(x-1, y+1, c);
+  } else {
+    Location newLoc;
+    newLoc.owner = map[x][y];
+    newLoc.loc = make_pair(x,y);
+    boarders[c- '0'].push_back (newLoc);
+  }
+}
+
+void exploredSetFalse() {
+  for (int y = 0; y <= 19; y++) {
+    for (int x = 0; x <= 34; x++) {
+      explored[x][y] = false;
+    }
+  }
+}
+
+void boarderMapSetQuestion() {
+ for (int y = 0; y <= 19; y++) {
+    for (int x = 0; x <= 34; x++) {
+      boarderMap[x][y] = '?';
+    }
+  }
+}
+
+void exploreEdge() {
+  pair<int,int> bounds[2] = {make_pair(0,0), make_pair(24,19)};
+  list<pair<int,int>> boarder = getBoarder(bounds, false);
+  list<pair<int,int>>::iterator i;
+  for (i = boarder.begin(); i != boarder.end(); i++) {
+    char c = map[i->first][i->second];
+    if ( c != '.') boarderMap[i->first][i->second] = c;
+  }
+}
+
+void explore() {
+  locExplored = 0;
+  for (int i = 0; i <= opponentCount; i++) {
+    boarders[i].erase(boarders[i].begin(),boarders[i].end());
+  }
+  for (int i = 0; i <= opponentCount; i++) {
+    exploredSetFalse();
+    for (int y = 0; y <= 19; y++) {
+      for (int x = 0; x <= 34; x++) {
+        if (explored[x][y] == false && map[x][y] != (char)(i+48)) {
+          exploreLocation(x,y, (char)(i+48));
+        }
+      }
+    }
+  }
+  boarderMapSetQuestion();
+  buildBoarderMap();
+  exploreEdge();
+  cerr << "locations Explored: " << locExplored << endl;
+}
+
+pair<int,int> isBlanks(pair<int,int> coord1, pair<int,int> coord2, char c) {
+  int count = 0;
+  int cCount = 0;
+  //cerr << "testing for blanks" << endl;
+  for (int y = min(coord1.second, coord2.second)+1; y <= max(coord1.second, coord2.second)-1; y++) {
+    for (int x = min(coord1.first, coord2.first)+1; x <= max(coord1.first, coord2.first)-1; x++) {
+      if (map[x][y] == '.') count ++;
+      else if (map[x][y] == c) cCount ++;
+    }
+  }
+  for (int y = min(coord1.second, coord2.second); y <= max(coord1.second, coord2.second); y++) {
+    for (int x = min(coord1.first, coord2.first); x <= max(coord1.first, coord2.first); x++) {
+      if (map[x][y] != '.' && map[x][y] != c) return make_pair(ENEMY,ENEMY);
+    }
+  }
+  //cerr << "blanks:" << count << endl;
+  return make_pair(count,cCount);
+}
+
+list<pair<int,int>> path;
+pair<int,int> largestPathEnd;
+pair<int,int> largestPathStart;
+list<pair<int,int>> possBounds;
+list<pair<int,int>> prevLoc;
+list<pair<int,int>> prevVelocity;
+int largestBlanks = 0;
+float largestPercent = 0;
+float largestEmptyRatio = 0;
+int largestBoarderLeft = 0;
+
+pair<int,int> findVelocity (pair<int,int> pos1, pair<int,int> pos2) {
+  int xVelocity = pos1.first - pos2.first;
+  int yVelocity = pos1.second - pos2.second;
+  return make_pair(xVelocity, yVelocity);
+}
+
+void printPossBounds() {
+  list<pair<int,int>>::iterator i;
+  cerr << "Possible Bounds: " << endl;
+  for (i = possBounds.begin(); i != possBounds.end(); i++) {
+    cerr << i->first << ", " << i->second << endl;
+  }
+}
+
+bool enemyOnSquare(list<pair<int,int>> boarder, char c) {
+   list<pair<int,int>>::iterator i;
+  for (i = boarder.begin(); i != boarder.end(); i++) {
+    if (opponent[(int)(c-'1')].first == *i) return true;
+  }
+  return false;
+}
+
+void findPath(int x, int y, char c) {
+  //cerr << "finding Path" << endl;
+  //if (possBounds.empty()) possBounds.push_front(opponent[((int)(c-'0')) -1].first);//if there are no possible bounds, push on the enemy's location
+  if (x > 34 || x < 0 || y > 19 || y < 0) return;
+  explored[x][y] = true;
+  //cerr << "boarderMap[" << x << "][" << y << "] = " << boarderMap[x][y] << endl;
+  if (boarderMap[x][y] == c) {
+    pair<int,int> velocity = findVelocity(make_pair(x,y), *prevLoc.begin());
+    if (prevVelocity.empty()) prevVelocity.push_front(velocity); //if first time, push on the first velocity
+    if (velocity.first != prevVelocity.begin()->first || velocity.second != prevVelocity.begin()->second) {
+      if(!prevLoc.empty()) possBounds.push_front(*prevLoc.begin());
+    }
+    //cerr << "finding Path" << endl;
+    path.push_front(make_pair(x, y));
+    list<pair<int,int>>::iterator i;
+    for (i = possBounds.begin(); i != possBounds.end(); i++) {
+      pair<int,int> bounds[2] = {*i, *path.begin()};
+      pair<int,int> isBlanksOut = isBlanks(*i, *path.begin(), c);
+      if (isBlanksOut.first == ENEMY)continue;
+      //if (isBlanksOut.second > 0) break;
+      int blanks = isBlanksOut.first;
+      int owned = isBlanksOut.second;
+      float emptyRatio = blanks/max(area(bounds),1);
+      //cerr << "blanks: " << blanks << endl << "largestBlanks: " << largestBlanks << endl;
+      if (blanks >= largestBlanks) {
+        //cerr << "bounds between " << bounds[0].first << ", " << bounds[0].second <<
+        //" and " << bounds[1].first << ", " << bounds[1].second;
+        list<pair<int,int>> boarderBlanks = getBoarder(bounds);
+        list<pair<int,int>> boarder = getBoarder(bounds, false);
+        //cerr << "   number of blanks: " << boarderBlanks.size() << "   " << "perimiter: " << perimiter(bounds);
+        float percent = (1 - (float)boarderBlanks.size() / (float)perimiter(bounds))*100;
+        //cerr << "   percent: " << percent << endl;
+        if ((blanks > largestBlanks && boarderBlanks.size() < perimiter(bounds)/2 - 1 && owned < area(bounds)/3)  ||
+            (blanks == largestBlanks && boarderBlanks.size() < perimiter(bounds)/2 - 1 && percent > largestPercent && owned < area(bounds)/10)) {
+          if (enemyOnSquare(boarder, c)) {
+            //cerr << "new largest path: " << x << ", " << y << endl;
+            largestBlanks = blanks;
+            largestPercent = percent;
+            largestEmptyRatio = emptyRatio;
+            largestBoarderLeft = perimiter(bounds) - boarderBlanks.size();
+            largestPathEnd = make_pair(x, y);
+            largestPathStart = *i;
+          }
+        }
+      }
+    }
+    prevLoc.push_front(make_pair(x,y));
+    prevVelocity.push_front(velocity);
+    if (!explored[x-1][y]) findPath(x-1, y, c);
+    if (!explored[x+1][y]) findPath(x+1, y, c);
+    if (!explored[x][y-1]) findPath(x, y-1, c);
+    if (!explored[x][y+1]) findPath(x, y+1, c);
+    path.pop_front();
+    prevLoc.pop_front();
+    prevVelocity.pop_front();
+  } else return;
+}
+
+pair<pair<int,int>,pair<int,int>> enemySquare;
+
+void findLargestEnemySquare() {
+  enemySquare = make_pair(make_pair(0,0),make_pair(0,0));
+  largestBlanks = 0;
+  largestPercent = 0;
+  largestEmptyRatio = 0;
+  largestBoarderLeft = 0;
+  possBounds.erase(possBounds.begin(),possBounds.end());
+  for (int i = 1; i <= opponentCount; i++) {
+    exploredSetFalse();
+    cerr << "exploring path" << endl;
+    cerr << opponent[i-1].first.first << endl;
+    findPath(opponent[i-1].first.first, opponent[i-1].first.second, (char)(i+48));
+  }
+  //printPossBounds();
+  cerr << "largest Square is between " << largestPathStart.first << ", " << largestPathStart.second <<
+    " and " << largestPathEnd.first << ", " <<largestPathEnd.second << endl;
+  cerr << "percent: " << largestPercent << endl;
+  enemySquare = make_pair(largestPathStart, largestPathEnd);
+}
+
+int smallestDist;
+pair<int,int> closestLoc;
+
+bool goToNearestBlank(pair<pair<int,int>,pair<int,int>> square) {
+  cerr << "attacking the enemy" << endl;
+  smallestDist = 1000;
+  for (int y = min(square.first.second, square.second.second)+1; y <= max(square.first.second, square.second.second)-1; y++) {
+    for (int x = min(square.first.first, square.second.first) + 1; x <= max(square.first.first, square.second.first)-1; x++) {
+      if (map[x][y] == '.') {
+        int dist = distCalc(make_pair(x,y), make_pair(myX,myY));
+        if (dist < smallestDist) {
+          smallestDist = dist;
+          closestLoc = make_pair(x,y);
+        }
+      }
+    }
+  }
+  if (distCalc(make_pair(myX,myY), closestLoc)+2 < largestBoarderLeft) {
+    findSquareBoarders[0] = square.first;
+    findSquareBoarders[1] = square.second;
+    //output(closestLoc.first, closestLoc.second);
+    return true;
+  }
+  else return false;
+}
+
+int myPoints;
+int myLastPoints;
+
+void getPoints() {
+  myLastPoints = myPoints;
+  myPoints = 0;
+   for (int y = 0; y <= 19; y++) {
+    for (int x = 0; x <= 34; x++) {
+      if (map[x][y] == '0') myPoints++;
+    }
+  }
+}
+
+int main()
+{
+  cin >> opponentCount; cin.ignore();
+  cerr << "opponentCount: " << opponentCount << endl;
+  if (opponentCount == 1) squareSize = 15;
+  else if (opponentCount == 2) squareSize = 10;
+  else squareSize = 7;
+  srand (time(NULL));
+  // game loop
+  while (1) {
+    hasOutputed = false;
+    cin >> gameRound; cin.ignore();
+    cerr << "GameRound: " << gameRound << endl;
+    int backInTimeLeft; // Remaining back in time
+    cin >> myX >> myY >> backInTimeLeft; cin.ignore();
+    for (int i = 0; i < opponentCount; i++) {
+      int opponentX; // X position of the opponent
+      int opponentY; // Y position of the opponent
+      int opponentBackInTimeLeft; // Remaining back in time of the opponent
+      cin >> opponent[i].first.first >> opponent[i].first.second >> opponentBackInTimeLeft; cin.ignore();
+      cerr << opponent[i].first.first << endl;
+    }
+    cerr << "getting map" << endl;
+    getMap();
+    getPoints();
+    if (myPoints > myLastPoints + 1 || countBlanks(findSquareBoarders[0].first, findSquareBoarders[0].second, findSquareBoarders[1].first, findSquareBoarders[1].second) < 10) {
+      findSquareBoarders[0] = make_pair(0,0);
+      findSquareBoarders[1] = make_pair(0,0);
+    }
+    //outputMap();
+    findVelocity();
+    createValueMap();
+    explore();
+    //outputMap(boarderMap);
+    //cerr << "finding enemy squares" << endl;
+    findLargestEnemySquare();
+    //findEnemySquares();
+    //cerr << "done finding enemy squares" << endl;
+    if (opponentCount == 1 && countBlanks(enemySquare.first.first, enemySquare.first.second, enemySquare.second.first, enemySquare.second.second) > 50) {
+      if (timeToCapture(getBoarder(lastSquare)) > 10) {
+        goToNearestBlank(enemySquare);
+      }
+    }
+    findSquare();
+    storeVals();
+    if (hasOutputed == false) output (0,0);
+  }
+}

@@ -1,0 +1,25 @@
+/*
+  Things to do based on time:
+  it should calc the amount of movements it would take to capture a given square
+  then it can devide the number of squares gotten by the number of turns it took
+  this will give a much better indicator of the value of the square than current
+  ways of doing things
+
+  in order to calculate time, I will want to have a recursive function that goes
+  through every different order of the empty squares on the border.  This may
+  be easier if the list was a different data type, check things out.
+
+  the number of calculations this will take would be astronomical at the start.
+  like, 10 billion. if the square is above a certain size (TBD) assume that it
+  will have to trace the entire square anyways instead of doing fancy calcs.
+
+  better yet!  order your list so that it goes around the square in order, that
+  way, they are already in the optimal order!  no need to recurse! Depending
+  on what is the closest blank will decide where to start in the list.
+
+  Time Travel:
+  A good begining use of time travel is try to be super greedy in the beginning,
+  and then if someone screws you up, go back in time and make it so they cant.
+  another good use is if they get a very large chunk of the map, if that happens
+  immediately go back in time and stop it from happening!
+*/

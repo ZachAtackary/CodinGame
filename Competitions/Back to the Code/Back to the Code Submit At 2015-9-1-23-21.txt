@@ -1,0 +1,325 @@
+#include <iostream>
+#include <string>
+#include <vector>
+#include <algorithm>
+#include <sstream>
+#include <list>
+#include "stdlib.h"
+#include <utility>
+
+
+using namespace std;
+
+const int RIGHT = 1;
+const int LEFT = -1;
+const int EMPTY = 1000;
+
+list<pair<int,int>> lastSquare;
+
+const int BOARDLENGTH = 35;
+const int BOARDHEIGHT = 20;
+typedef char Board[BOARDLENGTH][BOARDHEIGHT];
+struct BoardArrayType {
+  Board board;
+};
+list <BoardArrayType> recentBoardStates;
+
+float timeMultiplier;
+bool firstTime = true;
+bool makeSquareInit = true;
+bool closestWallDone, closestCornerDone, restWallsDone;
+int enemyXVelocity, prevEnemyXVelocity, enemyYVelocity, prevEnemyYVelocity,
+  eX, prevEnemyX, eY, prevEnemyY;
+int myX, prevMyX, myY, prevMyY, destination[2];
+int turn = 101;
+int lastTurn = 100;
+list <int> destinationsX;
+list <int> destinationsY;
+int myXVelocity, prevMyXVelocity, myYVelocity, prevMyYVelocity;
+int opponentCount; // Opponent count
+BoardArrayType map;
+
+int tempDestX = 1000;
+int importantDestinations = 0;
+
+void outputScreen(BoardArrayType map) {
+    stringstream s;
+    for (int y = 0; y < 20; y++) {
+        for (int x = 0; x < 35; x++) {
+            s << map.board[x][y];
+        }
+        s << endl;
+    }
+    cerr << s.str();
+}
+
+void findVelocity() {
+  if (firstTime) {
+    prevEnemyXVelocity = 0;
+    prevEnemyX =  eX;
+    prevEnemyYVelocity = 0;
+    prevEnemyY = eY;
+    prevMyXVelocity = 0;
+    prevMyX = myX;
+    prevMyYVelocity = 0;
+    prevMyY = myY;
+    firstTime = false;
+  }
+  enemyXVelocity = eX - prevEnemyX;
+  enemyYVelocity = eY - prevEnemyY;
+  myXVelocity = myX - prevMyX;
+  myYVelocity = myY - prevMyY;
+}
+
+void storeVals() {
+  prevEnemyXVelocity = enemyXVelocity;
+  prevEnemyYVelocity = enemyYVelocity;
+  prevEnemyX = eX;
+  prevEnemyY = eY;
+  prevMyXVelocity = myXVelocity;
+  prevMyYVelocity = myYVelocity;
+  prevMyX = myX;
+  prevMyY = myY;
+}
+
+void getMap() {
+  char c;
+  for (int y = 0; y < 20; y++) {
+    string line; // One line of the map ('.' = free, '0' = you, otherwise the id of the opponent)
+    cin >> line; cin.ignore();
+    for (int x = 0; x < line.length(); x++) {
+      map.board[x][y] = line[x];
+    }
+  }
+  recentBoardStates.push_front(map);
+  if (recentBoardStates.size() > 25) recentBoardStates.pop_back();
+}
+
+int minMax(int x, int minimum, int maximum) {
+  x = min(max(x, minimum), maximum);
+  return x;
+}
+
+void output(int x, int y) {
+  cout << x << "  " << y << endl;
+}
+
+void print(list<pair<int,int>> s) {
+  list<pair<int,int>>::iterator i;
+  for( i = s.begin(); i != s.end(); ++i)
+    cerr << i->first << " " << i->second << endl;
+  cerr << endl;
+}
+
+int timeToCapture(list<pair<int,int>> emptyBoarder, bool out = false) {
+  if (out == true) lastSquare = emptyBoarder;
+  int minDist = 1000;
+  int distToLoc;
+  list<pair<int,int>>::iterator i;
+  list<pair<int,int>>::iterator loc = emptyBoarder.begin();
+  for (i = emptyBoarder.begin(); i != emptyBoarder.end(); ++i) {
+    distToLoc = abs(myX - i->first) + abs(myY - i->second);
+    if( distToLoc < minDist) {
+      minDist = distToLoc;
+      loc = i;
+    }
+  }
+  int time = minDist;
+  //cerr << "min dist to start: " << minDist;
+  pair<int,int> prevLoc = *loc;
+  pair<int,int> firstMove = make_pair(EMPTY,EMPTY);
+  for (i = loc; i != emptyBoarder.end(); i++) {
+    if (firstMove.first == EMPTY) firstMove = *i;
+    time += abs(prevLoc.first - i->first) + abs(prevLoc.second - i->second);
+    prevLoc = make_pair(i->first, i->second);
+  }
+  for (i = emptyBoarder.begin(); i != loc; i++) {
+    time += abs(prevLoc.first - i->first) + abs(prevLoc.second - i->second);
+    prevLoc = make_pair(i->first, i->second);
+  }
+  int time2 = minDist;
+  pair<int,int> firstMove2 = make_pair(EMPTY,EMPTY);;
+  prevLoc = *loc;
+  for (i = loc; i != emptyBoarder.begin(); i--) {
+    if (firstMove2.first == EMPTY) firstMove2 = *i;
+    time2 += abs(prevLoc.first - i->first) + abs(prevLoc.second - i->second);
+    prevLoc = make_pair(i->first, i->second);
+  }
+  for (i = emptyBoarder.end(); i != loc; i--) {
+    time2 += abs(prevLoc.first - i->first) + abs(prevLoc.second - i->second);
+    prevLoc = make_pair(i->first, i->second);
+  }
+  //cerr << "time to capture: " << time << endl;
+  if (time2 < time) {
+    if (out == true) {
+      if (firstMove2.first == EMPTY) output(0,0);
+      else output(firstMove2.first, firstMove2.second);
+    }
+    return time2;
+  }
+  else if (time < time2) {
+    if (out == true) {
+      if (firstMove.first == EMPTY) output(0,0);
+      output(firstMove.first, firstMove.second);
+    }
+    return time;
+  }
+  else {
+    if (out == true) output(0, 0);
+    return time;
+  }
+}
+
+list<pair<int,int>> getBoarder(pair<int,int> bounds[]) {
+  int xInc = 1;
+  list<pair<int,int>> top;
+  list<pair<int,int>> bottom;
+  list<pair<int,int>> left;
+  list<pair<int,int>> right;
+  list<pair<int,int>> boarder;
+
+  for (int x = bounds[0].first; x <= bounds[1].first-1; x++) {
+    if (map.board[x][bounds[0].second] == '.') top.push_back(make_pair(x,bounds[0].second));
+  }
+  for (int x = bounds[0].first+1; x <= bounds[1].first; x++) {
+    if (map.board[x][bounds[1].second] == '.') bottom.push_front(make_pair(x,bounds[1].second));
+  }
+  for (int y = bounds[0].second; y <= bounds[1].second-1; y++) {
+    if (map.board[bounds[1].first][y] == '.') right.push_back(make_pair(bounds[1].first,y));
+  }
+  for (int y = bounds[0].second+1; y <= bounds[1].second; y++) {
+    if (map.board[bounds[0].first][y] == '.') left.push_front(make_pair(bounds[0].first,y));
+  }
+  boarder.splice(boarder.end(), top);
+  boarder.splice(boarder.end(), right);
+  boarder.splice(boarder.end(), bottom);
+  boarder.splice(boarder.end(), left);
+  return boarder;
+}
+
+void traceSquare(pair<int,int> bounds[]) {
+  list<pair<int,int>> boarder = getBoarder(bounds);
+  print(boarder);
+  list<pair<int,int>>::iterator i;
+  float distToLoc;
+  float minDist = 1000;
+  pair<int,int> minLoc;
+  for( i = boarder.begin(); i != boarder.end(); ++i) {
+    if (map.board[i->first][i->second] == '.') {
+      distToLoc = abs(myX - i->first) + abs(myY - i->second);
+      if( distToLoc < minDist) {
+        minDist = distToLoc;
+        minLoc = *i;
+      }
+    }
+  }
+  cerr << "closest location on square: " << minLoc.first << " " << minLoc.second;
+  output(minLoc.first,minLoc.second);
+}
+
+int countBlanks(int x1, int y1, int x2, int y2) {
+  int count = 0;
+  for (int y = y1; y <= y2; y++) {
+    for (int x = x1; x <= x2; x++) {
+      if (map.board[x][y] == '.') count++;
+    }
+  }
+  return count;
+}
+
+void findSquare() {
+  int test = 0;
+  int maxX = 34;
+  float volume, time;
+  float bestValue = 0;
+  float value;
+  pair<int,int> bounds[2];
+  int distanceToCorners[4];
+  int cornersX[4];
+  int cornersY[4];
+  int count = 0;
+  for (int y1 = 0; y1 <= 19; y1++) {
+    for (int x1 = 0; x1 <= 34; x1++) {
+      for (int y2 = y1; y2 <= 19; y2++) {
+        for (int x2 = x1 -1; x2 <= maxX; x2++) {
+          count++;
+          if ((map.board[x2+1][y2] != '.' && map.board[x2+1][y2] != '0') || x2 == maxX) {
+            maxX = x2;
+            volume = countBlanks(x1, y1, x2, y2);
+            pair<int,int> boarder[2] = {make_pair(x1,y1),make_pair(x2,y2)};
+            time = timeToCapture(getBoarder(boarder))*timeMultiplier;
+            value = volume/time;
+            //cerr << "value: " << value << endl;
+            if (value > bestValue && x2 - x1 < 15 && y2 -y1 < 15) {
+              bestValue = value;
+              bounds[0] = make_pair(x1,y1);
+              bounds[1] = make_pair(x2,y2);
+            }
+          }
+        }
+      }
+      maxX = 34; //new starting position, new maxX
+    }
+  }
+  cerr << "number of calulations: " << count << endl;
+  cerr << "best value is at (" << bounds[0].first << ", " << bounds[0].second << "),(" << bounds[1].first << ", " << bounds[2].second << ")" << endl;
+  timeToCapture(getBoarder(bounds), true);
+}
+
+bool weHaveToGoBack(pair<int,int> intrusion) {
+  cerr << "We Have To Go Back!!!" << endl;
+  list<BoardArrayType>::iterator i;
+  char enemy = map.board[intrusion.first][intrusion.second];
+  //enemyVelocity = enemyVelocity[enemy];
+  for (i = recentBoardStates.begin(); i != recentBoardStates.end(); ++i) {
+    outputScreen(*i);
+    cerr << endl;
+  }
+}
+
+bool enemyInducedTimeTravel() {
+  list<pair<int,int>>::iterator i;
+  for (i = lastSquare.begin(); i != lastSquare.end(); ++i) {
+    if (map.board[i->first][i->second] != '.' && map.board[i->first][i->second] != '0') {
+      if(weHaveToGoBack(make_pair(i->first,i->second))) {
+        return true;
+      } else {
+        return false;
+      }
+    }
+  }
+}
+
+int main()
+{
+    cin >> opponentCount; cin.ignore();
+    if (opponentCount == 1) timeMultiplier = 2;
+    else if (opponentCount == 2) timeMultiplier = 3;
+    else timeMultiplier = 4;
+    srand (time(NULL));
+    // game loop
+    while (1) {
+        int gameRound;
+        cin >> gameRound; cin.ignore();
+        cerr << "GameRound: " << gameRound << endl;
+        int backInTimeLeft; // Remaining back in time
+        cin >> myX >> myY >> backInTimeLeft; cin.ignore();
+        for (int i = 0; i < opponentCount; i++) {
+            int opponentX; // X position of the opponent
+            int opponentY; // Y position of the opponent
+            int opponentBackInTimeLeft; // Remaining back in time of the opponent
+            cin >> opponentX >> opponentY >> opponentBackInTimeLeft; cin.ignore();
+            eX = opponentX; eY = opponentY;
+        }
+        getMap();
+        findVelocity();
+        if (backInTimeLeft == 1) {
+          if (enemyInducedTimeTravel()) {
+
+          }
+        }
+        findSquare();
+
+        storeVals();
+    }
+}

@@ -1,0 +1,397 @@
+#include <iostream>
+#include <string>
+#include <vector>
+#include <algorithm>
+#include <sstream>
+#include <list>
+#include "stdlib.h"
+
+
+using namespace std;
+
+const int RIGHT = 1;
+const int LEFT = -1;
+const int EMPTY = 1000;
+
+
+bool firstTime = true;
+bool makeSquareInit = true;
+bool closestWallDone, closestCornerDone, restWallsDone;
+int enemyXVelocity, prevEnemyXVelocity, enemyYVelocity, prevEnemyYVelocity,
+  eX, prevEnemyX, eY, prevEnemyY;
+int myX, prevMyX, myY, prevMyY, destination[2];
+int turn = 101;
+int lastTurn = 100;
+list <int> destinationsX;
+list <int> destinationsY;
+int myXVelocity, prevMyXVelocity, myYVelocity, prevMyYVelocity;
+int opponentCount; // Opponent count
+char map[35][20];
+
+int tempDestX = 1000;
+int importantDestinations = 0;
+
+void outputScreen() {
+    stringstream s;
+    for (int y = 0; y < 20; y++) {
+        for (int x = 0; x < 35; x++) {
+            s << map[x][y];
+        }
+        s << endl;
+    }
+    cerr << s.str();
+}
+
+void findVelocity() {
+  if (firstTime) {
+    prevEnemyXVelocity = 0;
+    prevEnemyX =  eX;
+    prevEnemyYVelocity = 0;
+    prevEnemyY = eY;
+    prevMyXVelocity = 0;
+    prevMyX = myX;
+    prevMyYVelocity = 0;
+    prevMyY = myY;
+    firstTime = false;
+  }
+  enemyXVelocity = eX - prevEnemyX;
+  enemyYVelocity = eY - prevEnemyY;
+  myXVelocity = myX - prevMyX;
+  myYVelocity = myY - prevMyY;
+}
+
+//table for detectTurn if statement
+// up turn left
+// 0xV -yV -> -xV 0yV
+
+// up turn right
+// 0xV -yV -> +xV 0yV
+
+// down turn left
+// 0xV +yV -> +xV 0yV
+
+// down turn right
+// 0xV +yV -> -xV 0yV
+
+// left turn left
+// -xV 0yV -> 0xV +yV
+
+// left turn right
+// -xV 0yV -> 0xV -yV
+
+// right turn left
+// +xV 0yV -> 0xV -yV
+
+// right turn right
+// +xV 0yV -> 0xV +yV
+
+void detectTurn() {
+  if(prevMyXVelocity == myXVelocity && prevMyYVelocity == myYVelocity) return; //if not return, we turned!  Which way?
+  if ((prevMyXVelocity  == myYVelocity && myYVelocity)
+      || (prevMyYVelocity != myXVelocity && myXVelocity)) {
+    lastTurn = turn;
+    turn = RIGHT;
+  }
+  else {
+    lastTurn = turn;
+    turn = LEFT;
+  }
+}
+
+
+
+int look(int dir, int dist, int lookAhead = 0) {
+  int lookX = myX + lookAhead*myXVelocity + dist*myYVelocity*dir;
+  int lookY = myY + lookAhead*myYVelocity + dist*myXVelocity*dir;
+  cerr << "looking at " << lookX << "," << lookY << ". output: " << map[lookX][lookY] << endl;
+  if (lookX  > 34 || lookX < 0 || lookY > 19 || lookY < 0) return '?';
+  return map[lookX][lookY];
+}
+
+int lookRange(int dir, int dist1, int dist2, int lookAhead = 0, char value = '.') {
+  int i = min(dist1, dist2);
+  int j = max(dist1, dist2);
+
+  for (i ; i <= j; i++) {
+    if (look(dir, i, lookAhead) != value) return false;
+  }
+  return true;
+}
+
+bool detectPossSquare() {
+  //first, check if behind you is a straight line of me
+  if (myYVelocity == 0 && myXVelocity == 0) return false;
+  int x = 0;
+  int blanks = 0;
+  int lastBlanks = 0;
+  int totalBlanks = 0;
+  while(look(turn, x, -1) == '0') { //while behind me is me
+    x++;
+  }
+  int lastDistToCheck = EMPTY;
+  int distToCheck = x-1;
+  cerr << "dist to check: " << distToCheck << endl;
+  int i = 0;
+  while (true) {
+    int j = 0;
+    while(true) {
+      char checkedSpot = look(turn, j, i);
+      cerr << checkedSpot << endl;
+      if (checkedSpot == '.' || (i == 0 && j == 0)) blanks ++;
+      else if (checkedSpot == '0') { //we hit us, do we connect to the last row?
+        if (distToCheck == j) { //we are the same dist as last time, it connects
+          cerr << "straight line so far, good to go" << endl;
+          lastDistToCheck = distToCheck;
+          break;
+        }
+        if (lookRange(turn, j, distToCheck, i-1, '0')) { //if everything between the first us and the last distance is us, we are good
+          lastDistToCheck = distToCheck;
+          distToCheck = j; //next time we needto check against this one
+          break;
+        }
+      }
+      else {//if we hit an enemy first, the square can only be the last dist to check size
+        if (lastDistToCheck == EMPTY) return false;//this is the first time around, no possible square
+        else if (totalBlanks >= 1 && i > 1){
+          cerr << "blanks = " << totalBlanks << "add the square!!!!!!" << endl;
+          cerr << myXVelocity << myYVelocity;
+          importantDestinations = 2;
+          int firstX, firstY, secondX, secondY;
+          if (j > lastDistToCheck) {
+            firstX = myX + (i)*myXVelocity;
+            firstY = myY + (i)*myYVelocity;
+            secondX = firstX + (distToCheck)*myYVelocity*turn;
+            secondY = firstY + (distToCheck)*myXVelocity*turn;
+          } else {
+            firstX = myX + (i-1)*myXVelocity;
+            firstY = myY + (i-1)*myYVelocity;
+            secondX = firstX + (distToCheck)*myYVelocity*turn;
+            secondY = firstY + (distToCheck)*myXVelocity*turn;
+          }
+          cerr << firstX << " " << firstY << endl;
+          destinationsX.push_front(secondX);
+          destinationsX.push_front(firstX);
+          destinationsY.push_front(secondY);
+          destinationsY.push_front(firstY);
+          tempDestX = EMPTY;
+          return true;
+          //add the square to the destinations!
+        }
+        else {
+          cerr << "area too tiny, not worth" << endl;
+          return false;
+        }
+      }
+
+      totalBlanks += lastBlanks;
+      lastBlanks = blanks;
+      blanks = 0;
+      j++;
+    }
+    i++;
+  }
+}
+
+void storeVals() {
+  prevEnemyXVelocity = enemyXVelocity;
+  prevEnemyYVelocity = enemyYVelocity;
+  prevEnemyX = eX;
+  prevEnemyY = eY;
+  prevMyXVelocity = myXVelocity;
+  prevMyYVelocity = myYVelocity;
+  prevMyX = myX;
+  prevMyY = myY;
+}
+
+void getMap() {
+  char c;
+  for (int y = 0; y < 20; y++) {
+    string line; // One line of the map ('.' = free, '0' = you, otherwise the id of the opponent)
+    cin >> line; cin.ignore();
+    for (int x = 0; x < line.length(); x++) {
+      map[x][y] = line[x];
+    }
+  }
+}
+
+bool goToClosestCorner() {
+  if ((myX == 17 || myX == 0 || myX == 34) && (myY == 19 || myY == 0)) closestCornerDone = true;
+  if (closestCornerDone) return true;
+  if (myX < 9) destinationsX.push_back(0);
+  else if (myX > 25) destinationsX.push_back(34);
+  else destinationsX.push_back(17);
+  if(myY >= 10) destinationsY.push_back(19);
+  else destinationsY.push_back(0);
+  return false;
+}
+
+bool goToClosestWall() {
+  if (myX == 17 || myX == 0 || myX == 34 || myY == 19 || myY == 0) closestWallDone = true;
+  if (closestWallDone) return true;
+  int distToWallX, distToWallY;
+  if (myX < 9) distToWallX = myX;
+  else if (myX > 25) distToWallX = 34 - myX;
+  else distToWallX = abs(myX - 17);
+  if (myY >= 10) distToWallY = 19 - myY;
+  else distToWallY = myY;
+  if (distToWallX < distToWallY) {
+    if (myX < 9) destinationsX.push_back(0);
+    else if (myX > 25) destinationsX.push_back(34);
+    else destinationsX.push_back(17);
+    destinationsY.push_back(myY);
+  } else {
+    if (myY >= 10) destinationsY.push_back(19);
+    else destinationsY.push_back(0);
+    destinationsX.push_back(myX);
+  }
+  return false;
+}
+
+bool makeRestWalls() {
+  if ((myX == 0 || myX == 34) && myY == 0) {
+    if (myXVelocity == 0) destinationsX.push_back(17); //means that we came from below, time to go right
+    else destinationsY.push_back(19);
+  }
+  else if ((myX == 0 || myX == 34) && myY == 19) {
+    if (myXVelocity == 0) destinationsX.push_back(17);
+    else destinationsY.push_back(0);
+  }
+  else if (myX == 17 && myY == 0) {
+    if (myXVelocity == 0) destinationsX.push_back(0);
+    else destinationsY.push_back(19);
+  }
+  else if (myX == 17 && myY == 19) {
+    if (myXVelocity == 0) destinationsX.push_back(0);
+    else destinationsY.push_back(0);
+  }
+  return false;
+}
+
+void makeSquare() {
+  if (makeSquareInit == true) {
+    closestCornerDone = false;
+    closestWallDone = false;
+    restWallsDone = false;
+    makeSquareInit = false;
+  }
+  if (!goToClosestWall()) return;
+  if (!goToClosestCorner()) return;
+  if (!makeRestWalls()) return;
+  makeSquareInit = true;
+}
+
+int minMax(int x, int minimum, int maximum) {
+  x = min(max(x, minimum), maximum);
+  return x;
+}
+
+void output(int x, int y) {
+  if (x > 34 || x < 0 || y > 19 || y < 0) {x = rand() % 34; y = rand() %19;}
+  x = minMax(x, 0, 34);
+  y = minMax(y, 0, 19);
+  cout << x << "  " << y << endl;
+}
+
+void getAsCloseAsPossible(int destinationX, int destinationY) {
+  cerr << "geting as close as possible";
+  if (tempDestX != EMPTY) destinationX = tempDestX;
+  tempDestX = EMPTY;
+  cerr << " destx: " << destinationX  << " desty: " << destinationY << endl;
+  if (myX > destinationX) {
+    cerr << "destination to the left" << endl;
+    if (map[myX - 1][myY] != '.') {//if the next location isn't an empty space
+      if (map[myX][myY + 1] == '.') {output(myX, myY + 1); return;}
+      else if (map[myX][myY - 1] == '.') {output(myX, myY -1); return;}
+    }
+    output(myX - 1, myY); //if you can' avoid traveling on a used space, just do it
+  }
+  else if (myX < destinationX) {
+    cerr << "destination to the right" << endl;
+    if (map[myX + 1][myY] != '.') {//if the next location isn't an empty space
+      if (map[myX][myY + 1] == '.') {output(myX, myY + 1); return;}
+      else if (map[myX][myY - 1] == '.') {output(myX, myY -1); return;}
+    }
+    output(myX + 1, myY); //if you can' avoid traveling on a used space, just do it
+  }
+  else if (myY > destinationY) {
+    cerr << "destination to the up" << endl;
+    cerr << map[myX][myY - 1] << " " << map[myX + 1][myY] << " " << map[myX -1][myY];
+    if (map[myX][myY - 1] != '.') {//if the next location isn't an empty space
+      if (map[myX + 1][myY] == '.') {output(myX + 1, myY); tempDestX = myX + 1;  return;}
+      else if (map[myX - 1][myY] == '.') {output(myX - 1, myY); tempDestX = myX - 1; return;}
+    }
+    output(myX, myY - 1); //if you can' avoid traveling on a used space, just do it
+  }
+  else if (myY < destinationY) {
+    cerr << "destination to the down" << endl;
+    if (map[myX][myY + 1] != '.') {//if the next location isn't an empty space
+      if (map[myX + 1][myY] == '.') {output(myX + 1, myY); tempDestX = myX + 1; return;}
+      else if (map[myX - 1][myY] == '.') {output(myX - 1, myY); tempDestX = myX - 1; return;}
+    }
+    output(myX, myY + 1); //if you can' avoid traveling on a used space, just do it
+  }
+  else output(myX, myY);
+}
+
+bool goToDestinations() {
+  if (myX == *destinationsX.begin() && myY == *destinationsY.begin()) { //we have arrived to the location, remove it from the list
+    destinationsX.pop_front();
+    destinationsY.pop_front();
+    importantDestinations--;
+  }
+  if (destinationsX.empty()) return false;
+  if(importantDestinations <= 0) {
+    if (turn == lastTurn) {
+      cerr << "I've turned twice the same way! " << turn << endl;
+      detectPossSquare();
+    }
+  }
+  else {
+    output (*destinationsX.begin(), *destinationsY.begin());
+    return true;
+  }
+  getAsCloseAsPossible(*destinationsX.begin(), *destinationsY.begin());
+  return true;
+}
+
+int main()
+{
+    cin >> opponentCount; cin.ignore();
+
+    // game loop
+    while (1) {
+        int gameRound;
+        cin >> gameRound; cin.ignore();
+        cerr << "GameRound: " << gameRound << endl;
+        int backInTimeLeft; // Remaining back in time
+        cin >> myX >> myY >> backInTimeLeft; cin.ignore();
+        for (int i = 0; i < opponentCount; i++) {
+            int opponentX; // X position of the opponent
+            int opponentY; // Y position of the opponent
+            int opponentBackInTimeLeft; // Remaining back in time of the opponent
+            cin >> opponentX >> opponentY >> opponentBackInTimeLeft; cin.ignore();
+            eX = opponentX; eY = opponentY;
+        }
+        getMap();
+        findVelocity();
+        detectTurn();
+        destinationsX.push_back(rand() % 34);
+        destinationsY.push_back(rand() % 19);
+        if(goToDestinations()) {}
+        else {
+          makeSquare();
+          if(!destinationsX.empty()) {
+          goToDestinations();
+        }
+          //outputScreen();
+          // if (eX == 0 || (eX > 17  && eX != 34)) gX = eX + 1;
+          // else gX = eX - 1;
+          // if (eY == 0 || eY > 9 && eY != 19) gY = eY + 1;
+          //else gY = eY - 1;
+          // Write an action using cout. DON'T FORGET THE "<< endl"
+          // To debug: cerr << "Debug messages..." << endl;
+          //cout << destination[0] << " " << destination[1] << endl; // action: "x y" to move or "BACK rounds" to go back in time
+        }
+        storeVals();
+    }
+}
